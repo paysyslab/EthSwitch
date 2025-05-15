@@ -105,6 +105,7 @@ The option allows banks to do integration with the OpenConnect in a model where 
 The diagram below states the high-level flow of the transaction journey:
 
 
+
 ![2PaymentRequest](./2PaymentRequest.png)
 
 
@@ -317,8 +318,52 @@ Prior to initiating the payment, customers are required to do beneficiary accoun
 | **Bank System** | - Response back to channel with beneficiary account info |
 | **Channel** | - Display following to customer for payment confirmation:  <br> &nbsp;&nbsp;&nbsp;&nbsp;• Beneficiary name  <br> &nbsp;&nbsp;&nbsp;&nbsp;• Beneficiary account identifier  <br> &nbsp;&nbsp;&nbsp;&nbsp;• Transaction Amount  <br> &nbsp;&nbsp;&nbsp;&nbsp;• Other payment details |
 
+```mermaid
 
-![Open Connect - Title Fetch](./OCTitleFetch.png)
+sequenceDiagram
+    title 01 - OpenConnect: IPS: Title Fetch
+
+    participant Customer as Bank App
+    participant Backend as App Backend
+    participant Middleware
+    participant OpenConnect
+    participant IPS
+    participant DestinationBank
+
+    Note right of Customer: Customer select<br/>bank
+    Note right of Customer: Customer input<br/>A/c #
+    Note right of Customer: Customer input<br/>amount
+    Note right of Customer: Customer select<br/>payment purpose
+
+    Customer->>Backend: Title Fetch Request<br/>(CustomerInfo)
+    Backend->>Middleware: Title Fetch Request<br/>(CustomerInfo)
+    Middleware->>OpenConnect: Title Fetch Request<br/>(CustomerInfo)
+
+    OpenConnect->>OpenConnect: Validate Token
+    OpenConnect->>OpenConnect: Validate request
+    OpenConnect->>OpenConnect: Prepare ACMT.023
+
+    OpenConnect->>IPS: ACMT.023<br/>(AccountIdentification Request)
+    IPS->>IPS: Validate signature
+    IPS->>IPS: Validate request
+
+    IPS->>DestinationBank: ACMT.023<br/>(AccountIdentification Request)
+    DestinationBank->>DestinationBank: Validate request
+    DestinationBank->>DestinationBank: Parse request
+    DestinationBank->>DestinationBank: Validate account
+    DestinationBank->>DestinationBank: Prepare response
+
+    DestinationBank->>IPS: ACMT.024<br/>(AccountIdentification Response)
+    IPS->>OpenConnect: ACMT.024<br/>(AccountIdentification Response)
+    OpenConnect->>Middleware: Title Fetch Response<br/>(AccountInfo)
+    Middleware->>Backend: Title Fetch Response<br/>(AccountInfo)
+    Backend->>Customer: Title Fetch Response<br/>(AccountInfo)
+
+    Customer->>Customer: Display shown to<br/>customer
+
+
+```
+<!--- [Open Connect - Title Fetch](./OCTitleFetch.png)] --->
 
 
 #### 4.1.2 **Transaction Inquiry**
@@ -410,7 +455,68 @@ The section outlines the flow for the outward payments, where bank’s system wi
 | **Receiving Bank** | - Received payment confirmation with ‘ACSP’ from IPS  <br> - Credit beneficiary account  <br> - Sent notification to the receiver |
 
 
-![Scenario 1 – Payment Executed successfully](./IPSP2PTransfer.png)
+```mermaid
+sequenceDiagram
+    title 02 - Open Connect: IPS: P2P Transfer - S1 (Transaction Executed Successfully)
+
+    participant Customer as Bank App
+    participant Backend as App Backend
+    participant Middleware
+    participant OpenConnect
+    participant IPS
+    participant DestinationBank
+
+    Note right of Customer: Customer confirm<br/>details
+    Note right of Customer: Customer authorized<br/>transaction
+
+    Customer->>Backend: Payment Request<br/>(CustomerInfo, TxnInfo)
+    Backend->>Middleware: Payment Request<br/>(CustomerInfo, TxnInfo)
+
+    Middleware->>Middleware: Validate limit
+    Middleware->>Middleware: Hold funds from<br/>customer account
+
+    Middleware->>OpenConnect: Payment Request<br/>(CustomerInfo, TxnInfo)
+
+    OpenConnect->>OpenConnect: Validate Token
+    OpenConnect->>OpenConnect: Validate request
+    OpenConnect->>OpenConnect: Prepare pacs.008
+
+    OpenConnect->>IPS: Pacs.008<br/>(Payment Request)
+    IPS->>IPS: Validate signature
+    IPS->>IPS: Validate request
+    IPS->>IPS: Hold funds
+
+    IPS->>DestinationBank: PaymentAuthorizationResponse<br/>(Pacs.008)
+
+    DestinationBank->>DestinationBank: Validate Request
+    DestinationBank->>DestinationBank: Parse message
+    DestinationBank->>DestinationBank: Validate account
+
+    DestinationBank->>IPS: PaymentAuthorizationResponse<br/>(Pacs.002.ACSP)
+
+    IPS->>IPS: Debit sending<br/>participant
+    IPS->>IPS: Credit receiver<br/>participant
+
+    alt [: Debit Confirmation]
+        IPS->>OpenConnect: PaymentConfirmation<br/>(Pacs.002.ACSP)
+        OpenConnect->>Middleware: Update response
+        Middleware->>Backend: Payment Result<br/>(txnId)
+        Backend->>Middleware: Debit customer
+        Backend->>Customer: Payment Result<br/>(txnId)
+        Customer->>Customer: Display shown to<br/>customer
+    end
+
+    alt [: Credit leg]
+        IPS->>DestinationBank: PaymentConfirmation<br/>(Pacs.002.ACSP)
+        DestinationBank->>DestinationBank: Validate request
+        DestinationBank->>DestinationBank: Credit Customer
+        DestinationBank->>DestinationBank: Notify Customer
+    end
+
+```
+
+
+<!--- ![Scenario 1 – Payment Executed successfully](./IPSP2PTransfer.png) --->
 
 
 
@@ -439,7 +545,74 @@ The section outlines the flow for the outward payments, where bank’s system wi
 | **Receiving Bank** | - Received payment confirmation with ‘ACSP’ from IPS  <br> - Credit beneficiary account  <br> - Sent notification to the receiver |
 
 
-![Scenario 2 – Payment Executed successfully via Inquiry](./IPSP2PTransferviaInquiry.png)
+
+```mermaid
+sequenceDiagram
+    title 03 - Open Connect: IPS: P2P Transfer - S2 (Transaction Executed Successfully via Inquiry)
+
+    participant Customer as Bank App
+    participant Backend as App Backend
+    participant Middleware
+    participant OpenConnect
+    participant IPS
+    participant DestinationBank
+
+    Note right of Customer: Customer confirm<br/>details
+    Note right of Customer: Customer authorized<br/>transaction
+
+    Customer->>Backend: Payment Request<br/>(CustomerInfo, TxnInfo)
+    Backend->>Middleware: Payment Request<br/>(CustomerInfo, TxnInfo)
+
+    Middleware->>Middleware: Validate limit
+    Middleware->>Middleware: Hold funds from<br/>customer account
+
+    Middleware->>OpenConnect: Payment Request<br/>(CustomerInfo, TxnInfo)
+
+    OpenConnect->>OpenConnect: Validate Token
+    OpenConnect->>OpenConnect: Validate request
+    OpenConnect->>OpenConnect: Prepare pacs.008
+
+    OpenConnect->>IPS: Pacs.008<br/>(Payment Request)
+    IPS->>IPS: Validate signature
+    IPS->>IPS: Validate request
+    IPS->>IPS: Hold funds
+
+    IPS->>DestinationBank: PaymentAuthorizationResponse<br/>(Pacs.008)
+
+    DestinationBank->>DestinationBank: Validate Request
+    DestinationBank->>DestinationBank: Parse message
+    DestinationBank->>DestinationBank: Validate account
+
+    DestinationBank->>IPS: PaymentAuthorizationResponse<br/>(Pacs.002.ACSP)
+
+    IPS->>IPS: Debit sending<br/>participant
+    IPS->>IPS: Credit receiver<br/>participant
+
+    alt [: Credit leg]
+        IPS->>DestinationBank: PaymentConfirmation<br/>(Pacs.002.ACSP)
+        DestinationBank->>DestinationBank: Validate request
+        DestinationBank->>DestinationBank: Credit Customer
+        DestinationBank->>DestinationBank: Notify Customer
+    end
+
+    Note right of Customer: Do not received<br/>response
+
+    alt [: Transaction Inquiry]
+        Customer->>Backend: Transaction Inquiry<br/>(OrgTxnInfo)
+        Backend->>OpenConnect: Transaction Inquiry<br/>(Pacs.028)
+        OpenConnect->>IPS: PaymentConfirmation<br/>(Pacs.002.ACSP)
+    end
+
+    alt [: Debit Confirmation]
+        IPS->>OpenConnect: Update response
+        OpenConnect->>Middleware: Payment Result<br/>(txnId)
+        Middleware->>Backend: Debit customer
+        Backend->>Customer: Payment Result<br/>(txnId)
+        Customer->>Customer: Display shown to<br/>customer
+    end
+```
+
+<!--- ![Scenario 2 – Payment Executed successfully via Inquiry](./IPSP2PTransferviaInquiry.png) --->
 
 
 
@@ -464,9 +637,62 @@ The section outlines the flow for the outward payments, where bank’s system wi
 | **Channel** | - Display appropriate message to customer |
 
 
+```mermaid
+
+sequenceDiagram
+    title 04 - Open Connect: IPS: P2P Transfer - S3 (Transaction Rejected by Counterparty)
+
+    participant Customer as Bank App
+    participant Backend as App Backend
+    participant Middleware
+    participant OpenConnect
+    participant IPS
+    participant DestinationBank
+
+    Note right of Customer: Customer confirm<br/>details
+    Note right of Customer: Customer authorized<br/>transaction
+
+    Customer->>Backend: Payment Request<br/>(CustomerInfo, TxnInfo)
+    Backend->>Middleware: Payment Request<br/>(CustomerInfo, TxnInfo)
+
+    Middleware->>Middleware: Validate limit
+    Middleware->>Middleware: Hold funds from<br/>customer account
+
+    Middleware->>OpenConnect: Payment Request<br/>(CustomerInfo, TxnInfo)
+
+    OpenConnect->>OpenConnect: Validate Token
+    OpenConnect->>OpenConnect: Validate request
+    OpenConnect->>OpenConnect: Prepare pacs.008
+
+    OpenConnect->>IPS: Pacs.008<br/>(Payment Request)
+    IPS->>IPS: Validate signature
+    IPS->>IPS: Validate request
+    IPS->>IPS: Hold funds
+
+    IPS->>DestinationBank: PaymentAuthorizationResponse<br/>(Pacs.008)
+
+    DestinationBank->>DestinationBank: Validate Request
+    DestinationBank->>DestinationBank: Parse message
+    DestinationBank->>DestinationBank: Validate account
+    DestinationBank->>DestinationBank: Validate Failed
+
+    DestinationBank->>IPS: PaymentAuthorizationResponse<br/>(Pacs.002.RJCT)
+
+    IPS->>IPS: Release funds
+
+    alt [: Debit Reversal]
+        IPS->>OpenConnect: PaymentConfirmation<br/>(Pacs.002.RJCT)
+        OpenConnect->>Middleware: Update response
+        Middleware->>Backend: Payment Result<br/>(txnId)
+        Backend->>Middleware: Release funds
+        Backend->>Customer: Payment Result<br/>(txnId)
+        Customer->>Customer: Display shown to<br/>customer
+    end
 
 
-![Scenario 3 – Payment Rejected by counterparty](./IPSP2PTransferRejectedbyCounterParty.png)
+```
+
+<!--- ![Scenario 3 – Payment Rejected by counterparty](./IPSP2PTransferRejectedbyCounterParty.png) --->
 
 
 
@@ -489,10 +715,48 @@ The section outlines the flow for the outward payments, where bank’s system wi
 
 
 
-![Scenario 3 – Payment Rejected by IPS](./IPSP2PTransferRejectedbyIPS.png)
+```mermaid
+sequenceDiagram
+    title 05 - Open Connect: IPS: P2P Transfer - S4 (Rejected by IPS)
 
+    participant Customer as Bank App
+    participant Backend as App Backend
+    participant Middleware
+    participant OpenConnect
+    participant IPS
 
+    Note right of Customer: Customer confirm<br/>details
+    Note right of Customer: Customer authorized<br/>transaction
 
+    Customer->>Backend: Payment Request<br/>(CustomerInfo, TxnInfo)
+    Backend->>Middleware: Payment Request<br/>(CustomerInfo, TxnInfo)
+
+    Middleware->>Middleware: Validate limit
+    Middleware->>Middleware: Hold funds from<br/>customer account
+
+    Middleware->>OpenConnect: Payment Request<br/>(CustomerInfo, TxnInfo)
+
+    OpenConnect->>OpenConnect: Validate Token
+    OpenConnect->>OpenConnect: Validate request
+    OpenConnect->>OpenConnect: Prepare pacs.008
+
+    OpenConnect->>IPS: Pacs.008<br/>(Payment Request)
+    IPS->>IPS: Validate signature
+    IPS->>IPS: Validate request
+    IPS->>IPS: Funds not available
+
+    IPS->>OpenConnect: Payment Rejection<br/>(ADMI.002)
+
+    alt [: Debit Reversal]
+        OpenConnect->>Middleware: Update response
+        Middleware->>Backend: Payment Result<br/>(txnId)
+        Backend->>Middleware: Release funds
+        Backend->>Customer: Payment Result<br/>(txnId)
+        Customer->>Customer: Display shown to<br/>customer
+    end
+```
+
+<!--- ![Scenario 3 – Payment Rejected by IPS](./IPSP2PTransferRejectedbyIPS.png) --->
 
 
 
@@ -511,7 +775,42 @@ The section outlines the flow for the outward payments, where bank’s system wi
 
 
 
-![Scenario 3 – Payment Rejected by OC](./IPSP2PTransferRejectedbyOC.png)
+
+
+```mermaid
+sequenceDiagram
+    title 06 - Open Connect: IPS: P2P Transfer - S5 (Rejected by OC)
+
+    participant Customer as Bank App
+    participant Backend as App Backend
+    participant Middleware
+    participant OpenConnect
+
+    Note right of Customer: Customer confirm<br/>details
+    Note right of Customer: Customer authorized<br/>transaction
+
+    Customer->>Backend: Payment Request<br/>(CustomerInfo, TxnInfo)
+    Backend->>Middleware: Payment Request<br/>(CustomerInfo, TxnInfo)
+
+    Middleware->>Middleware: Validate limit
+    Middleware->>Middleware: Hold funds from<br/>customer account
+
+    Middleware->>OpenConnect: Payment Request<br/>(CustomerInfo, TxnInfo)
+
+    OpenConnect->>OpenConnect: Validate Token
+    OpenConnect->>OpenConnect: Validate request
+    OpenConnect->>OpenConnect: Validation Failed
+
+    alt [: Debit Reversal]
+        OpenConnect->>Middleware: Update response
+        Middleware->>Backend: Payment Result<br/>(txnId, RejectionCode)
+        Backend->>Middleware: Release funds
+        Backend->>Customer: Payment Result<br/>(txnId)
+        Customer->>Customer: Display shown to<br/>customer
+    end
+
+```
+<!--- ![Scenario 3 – Payment Rejected by OC](./IPSP2PTransferRejectedbyOC.png) --->
 
 
 
@@ -540,7 +839,76 @@ The section outlines the flow for the outward payments, where bank’s system wi
 | **Receiving Bank** | - Received payment confirmation with ‘ACSP’ from IPS  <br> - Credit beneficiary account  <br> - Sent notification to the receiver |
 
 
-![Scenario 6 – Payment Marked as TIP (Transaction In Process)](./PaymentMarkedasTIP.png)
+
+
+
+```mermaid
+sequenceDiagram
+    title 07 - Open Connect: IPS: P2P Transfer - S6 (Transaction in Process)
+
+    participant Customer as Bank App
+    participant Backend as App Backend
+    participant Middleware
+    participant OpenConnect
+    participant IPS
+    participant DestinationBank
+
+    Note right of Customer: Customer confirm<br/>details
+    Note right of Customer: Customer authorized<br/>transaction
+
+    Customer->>Backend: Payment Request<br/>(CustomerInfo, TxnInfo)
+    Backend->>Middleware: Payment Request<br/>(CustomerInfo, TxnInfo)
+
+    Middleware->>Middleware: Validate limit
+    Middleware->>Middleware: Hold funds from<br/>customer account
+
+    Middleware->>OpenConnect: Payment Request<br/>(CustomerInfo, TxnInfo)
+
+    OpenConnect->>OpenConnect: Validate Token
+    OpenConnect->>OpenConnect: Validate request
+    OpenConnect->>OpenConnect: Prepare pacs.008
+
+    OpenConnect->>IPS: Pacs.008<br/>(Payment Request)
+    IPS->>IPS: Validate signature
+    IPS->>IPS: Validate request
+    IPS->>IPS: Hold funds
+
+    IPS->>DestinationBank: PaymentAuthorizationResponse<br/>(Pacs.008)
+
+    DestinationBank->>DestinationBank: Validate Request
+    DestinationBank->>DestinationBank: Parse message
+    DestinationBank->>DestinationBank: Validate account
+
+    DestinationBank->>IPS: PaymentAuthorizationResponse<br/>(Pacs.002.ACSP)
+
+    IPS->>IPS: Debit sending<br/>participant
+    IPS->>IPS: Credit receiver<br/>participant
+
+    alt [: Credit leg]
+        IPS->>DestinationBank: PaymentConfirmation<br/>(Pacs.002.ACSP)
+        DestinationBank->>DestinationBank: Validate request
+        DestinationBank->>DestinationBank: Credit Customer
+        DestinationBank->>DestinationBank: Notify Customer
+    end
+
+    Note right of Customer: Do not received<br/>response
+
+    alt [: Transaction Inquiry]
+        Customer->>Backend: Transaction Inquiry<br/>(OrgTxnInfo)
+        Backend->>OpenConnect: Transaction Inquiry<br/>(Pacs.028)
+    end
+
+    alt [: Debit Confirmation]
+        OpenConnect->>OpenConnect: Txn got timeout
+        OpenConnect->>OpenConnect: Mark txn as "TIP"
+        OpenConnect->>Middleware: Update response
+        Middleware->>Backend: Payment Result<br/>(txnId)
+        Backend->>Customer: Payment Result<br/>(txnId)
+        Customer->>Customer: Display shown to<br/>customer
+    end
+```
+
+<!--- ![Scenario 6 – Payment Marked as TIP (Transaction In Process)](./PaymentMarkedasTIP.png) --->
 
 
 **For transaction inquiries scenarios please refer to Section 4.1.2**
@@ -587,7 +955,54 @@ OpenConnect receives account identification request from IPS, parse the message 
 
 
 
-![Title Fetch](./TitleFetch.png)
+```mermaid
+sequenceDiagram
+    title 08 - IPS: Title Fetch (Inward request)
+
+    participant Sender
+    participant BankSystem as Bank System
+    participant IPS
+    participant OpenConnect
+    participant Bank
+
+    Note right of Sender: Customer select<br/>bank
+    Note right of Sender: Customer input<br/>A/c #
+    Note right of Sender: Customer input<br/>amount
+    Note right of Sender: Customer select<br/>payment purpose
+
+    Sender->>BankSystem: Title Fetch Request<br/>(CustomerInfo)
+
+    BankSystem->>BankSystem: Validate Token
+    BankSystem->>BankSystem: Validate request
+    BankSystem->>BankSystem: Prepare ACMT.023
+
+    BankSystem->>IPS: ACMT.023<br/>(AccountIdentification Request)
+
+    IPS->>IPS: Validate signature
+    IPS->>IPS: Validate request
+
+    IPS->>OpenConnect: ACMT.023<br/>(AccountIdentification Request)
+
+    OpenConnect->>OpenConnect: Validate request
+    OpenConnect->>OpenConnect: Parse request
+    OpenConnect->>OpenConnect: Prepare TF message
+
+    OpenConnect->>Bank: TitleFetchRequest<br/>(customerInfo)
+
+    Bank->>Bank: Validate Request
+    Bank->>Bank: Validate account
+
+    Bank->>OpenConnect: TitleFetchResponse<br/>(accInfo)
+
+    OpenConnect->>OpenConnect: Prepare response
+    OpenConnect->>IPS: ACMT.024<br/>(AccountIdentification Response)
+    IPS->>BankSystem: ACMT.024<br/>(AccountIdentification Response)
+    BankSystem->>Sender: Title Fetch Response<br/>(AccountInfo)
+    Sender->>Sender: Display shown to<br/>customer
+```
+
+
+<!--- ![Title Fetch](./TitleFetch.png) --->
 
 
 
@@ -613,7 +1028,71 @@ OpenConnect receives account identification request from IPS, parse the message 
 | **Channel** | - eReceipt shown to customer |
 
 
-![Scenario 1 – Payment Executed successfully](./InwardTransfer.png)
+
+
+```mermaid
+sequenceDiagram
+    title 09 - Open Connect: IPS: P2P Inward Transfer - S1 (Transaction Executed Successfully)
+
+    participant Customer as Bank App
+    participant SenderBank as Sender Bank
+    participant IPS
+    participant OpenConnect
+    participant ReceivingBank as Receiving Bank
+
+    Note right of Customer: Customer confirm<br/>details
+    Note right of Customer: Customer authorized<br/>transaction
+
+    Customer->>SenderBank: Payment Request<br/>(CustomerInfo, TxnInfo)
+
+    SenderBank->>SenderBank: Validate limit
+    SenderBank->>SenderBank: Hold funds from<br/>customer account
+    SenderBank->>SenderBank: Prepare pacs.008
+
+    SenderBank->>IPS: Pacs.008<br/>(Payment Request)
+
+    IPS->>IPS: Validate signature
+    IPS->>IPS: Validate request
+    IPS->>IPS: Hold funds
+
+    IPS->>OpenConnect: PaymentAuthorizationResponse<br/>(Pacs.008)
+
+    OpenConnect->>OpenConnect: Validate Request
+    OpenConnect->>OpenConnect: Parse message
+    OpenConnect->>OpenConnect: Prepare a/c veri request
+
+    OpenConnect->>ReceivingBank: Account Verification request<br/>(accInfo)
+    ReceivingBank->>ReceivingBank: Validate account
+    ReceivingBank->>OpenConnect: Account Verification response<br/>(accInfo)
+
+    OpenConnect->>IPS: PaymentAuthorizationResponse<br/>(Pacs.002.ACSP)
+
+    IPS->>SenderBank: Debit sending<br/>participant
+    IPS->>ReceivingBank: Credit receiver<br/>participant
+
+    alt [: Debit Confirmation]
+        IPS->>SenderBank: PaymentConfirmation<br/>(Pacs.002.ACSP)
+        SenderBank->>SenderBank: Update response
+        SenderBank->>SenderBank: Debit customer
+        SenderBank->>Customer: Payment Result<br/>(txnId)
+        Customer->>Customer: Display shown to<br/>customer
+    end
+
+    alt [: Credit leg]
+        IPS->>OpenConnect: PaymentConfirmation<br/>(Pacs.002.ACSP)
+        OpenConnect->>OpenConnect: Validate request
+        OpenConnect->>OpenConnect: Prepare credit request
+        OpenConnect->>ReceivingBank: Credit Request<br/>(AccInfo, TxnInfo)
+        ReceivingBank->>ReceivingBank: Validate request
+        ReceivingBank->>ReceivingBank: Credit Customer
+        ReceivingBank->>ReceivingBank: Notify Customer
+        ReceivingBank->>OpenConnect: Credit Result
+        OpenConnect->>OpenConnect: Makr txn as<br/>"Completed"
+    end
+
+```
+
+<!--- ![Scenario 1 – Payment Executed successfully](./InwardTransfer.png) --->
 
 
 
@@ -641,8 +1120,74 @@ OpenConnect receives account identification request from IPS, parse the message 
 | **Sender Bank** | - Debit customer  <br> - Sent notification to customer  <br> - Sent payment result to channel |
 | **Channel** | - eReceipt shown to customer |
 
+```mermaid
+sequenceDiagram
+    title 10 - Open Connect: IPS: P2P Inward Transfer - S2 (Credit Inquiry Flow)
 
-![Scenario 2 – Payment Completed by credit inquiry](./CreditInquiry.png)
+    participant Customer as Bank App
+    participant SenderBank as Sender Bank
+    participant IPS
+    participant OpenConnect
+    participant ReceivingBank as Receiving Bank
+
+    Note right of Customer: Customer confirm<br/>details
+    Note right of Customer: Customer authorized<br/>transaction
+
+    Customer->>SenderBank: Payment Request<br/>(CustomerInfo, TxnInfo)
+
+    SenderBank->>SenderBank: Validate limit
+    SenderBank->>SenderBank: Hold funds from<br/>customer account
+    SenderBank->>SenderBank: Prepare pacs.008
+
+    SenderBank->>IPS: Pacs.008<br/>(Payment Request)
+
+    IPS->>IPS: Validate signature
+    IPS->>IPS: Validate request
+    IPS->>IPS: Hold funds
+
+    IPS->>OpenConnect: PaymentAuthorizationResponse<br/>(Pacs.008)
+
+    OpenConnect->>OpenConnect: Validate Request
+    OpenConnect->>OpenConnect: Parse message
+    OpenConnect->>OpenConnect: Prepare a/c veri request
+
+    OpenConnect->>ReceivingBank: Account Verification request<br/>(accInfo)
+    ReceivingBank->>ReceivingBank: Validate account
+    ReceivingBank->>OpenConnect: Account Verification response<br/>(accInfo)
+
+    OpenConnect->>IPS: PaymentAuthorizationResponse<br/>(Pacs.002.ACSP)
+
+    IPS->>SenderBank: Debit sending<br/>participant
+    IPS->>ReceivingBank: Credit receiver<br/>participant
+
+    alt [: Debit Confirmation]
+        IPS->>SenderBank: PaymentConfirmation<br/>(Pacs.002.ACSP)
+        SenderBank->>SenderBank: Update response
+        SenderBank->>SenderBank: Debit customer
+        SenderBank->>Customer: Payment Result<br/>(txnId)
+        Customer->>Customer: Display shown to<br/>customer
+    end
+
+    alt [: Credit leg]
+        IPS->>OpenConnect: PaymentConfirmation<br/>(Pacs.002.ACSP)
+        OpenConnect->>OpenConnect: Validate request
+        OpenConnect->>OpenConnect: Prepare credit request
+        OpenConnect->>ReceivingBank: Credit Request<br/>(AccInfo, TxnInfo)
+        ReceivingBank->>ReceivingBank: Validate request
+        ReceivingBank->>ReceivingBank: Credit Customer
+        ReceivingBank->>ReceivingBank: Notify Customer
+
+        Note right of ReceivingBank: response not received
+
+        ReceivingBank->>ReceivingBank: Credit Inquiry<br/>(TxnInfo)
+        ReceivingBank->>ReceivingBank: Inquire txn
+        ReceivingBank->>OpenConnect: Credit Result
+        OpenConnect->>OpenConnect: Makr txn as<br/>"Completed"
+    end
+
+
+```
+<!--- ![Scenario 2 – Payment Completed by credit inquiry](./CreditInquiry.png) --->
 
 
 
@@ -663,8 +1208,59 @@ OpenConnect receives account identification request from IPS, parse the message 
 | **Channel** | - Appropriate message shown to customer |
 
 
+```mermaid
 
-![Scenario 3 – Account verification rejected by Host](./InwardTransferRejectedbyHost.png)
+sequenceDiagram
+    title 11 - Open Connect: IPS: P2P Inward Transfer - S3 (Reject by host)
+
+    participant Customer as Bank App
+    participant SenderBank as Sender Bank
+    participant IPS
+    participant OpenConnect
+    participant ReceivingBank as Receiving Bank
+
+    Note right of Customer: Customer confirm<br/>details
+    Note right of Customer: Customer authorized<br/>transaction
+
+    Customer->>SenderBank: Payment Request<br/>(CustomerInfo, TxnInfo)
+
+    SenderBank->>SenderBank: Validate limit
+    SenderBank->>SenderBank: Hold funds from<br/>customer account
+    SenderBank->>SenderBank: Prepare pacs.008
+
+    SenderBank->>IPS: Pacs.008<br/>(Payment Request)
+
+    IPS->>IPS: Validate signature
+    IPS->>IPS: Validate request
+    IPS->>IPS: Hold funds
+
+    IPS->>OpenConnect: PaymentAuthorizationResponse<br/>(Pacs.008)
+
+    OpenConnect->>OpenConnect: Valldate Request
+    OpenConnect->>OpenConnect: Parse message
+    OpenConnect->>OpenConnect: Prepare a/c veri request
+
+    OpenConnect->>ReceivingBank: Account Verification request<br/>(accInfo)
+    ReceivingBank->>ReceivingBank: Validate account
+    ReceivingBank->>OpenConnect: Account Verification response<br/>(accInfo)
+
+    OpenConnect->>IPS: PaymentAuthorizationResponse<br/>(Pacs.002.RJCT)
+    IPS->>SenderBank: Release funds
+
+    alt [: Debit Release]
+        IPS->>SenderBank: PaymentConfirmation<br/>(Pacs.002.RJCT)
+        SenderBank->>SenderBank: Update response
+        SenderBank->>SenderBank: Release funds
+        SenderBank->>Customer: Payment Result<br/>(txnId)
+        Customer->>Customer: Display shown to<br/>customer
+    end
+
+```
+
+
+
+
+<!--- ![Scenario 3 – Account verification rejected by Host](./InwardTransferRejectedbyHost.png) --->
 
 
 #### 4.4.4 **Scenario 4 – Credit request rejected by host; instant return initiated**
@@ -688,10 +1284,77 @@ OpenConnect receives account identification request from IPS, parse the message 
 | **IPS** | - Validate signature  <br> - Validate request  <br> - Debit receiving participant, credit sending participant  <br> - Sent return payment to sending participant |
 | **Sender Bank System** | - Credit sender account  <br> - Sent transaction failure notification to customer |
 
+```mermaid
+sequenceDiagram
+    title 12 - Open Connect: IPS: P2P Inward Transfer - S4 (Credit Failed by Host)
+
+    participant Customer as Bank App
+    participant SenderBank as Sender Bank
+    participant IPS
+    participant OpenConnect
+    participant ReceivingBank as Receiving Bank
+
+    Note right of Customer: Customer confirm<br/>details
+    Note right of Customer: Customer authorized<br/>transaction
+
+    Customer->>SenderBank: Payment Request<br/>(CustomerInfo, TxnInfo)
+    SenderBank->>SenderBank: Validate limit
+    SenderBank->>SenderBank: Hold funds from<br/>customer account
+    SenderBank->>SenderBank: Prepare pacs.008
+
+    SenderBank->>IPS: Pacs.008<br/>(Payment Request)
+    IPS->>IPS: Validate signature
+    IPS->>IPS: Validate request
+    IPS->>IPS: Hold funds
+
+    IPS->>OpenConnect: PaymentAuthorizationResponse<br/>(Pacs.008)
+    OpenConnect->>OpenConnect: Validate Request
+    OpenConnect->>OpenConnect: Parse message
+    OpenConnect->>OpenConnect: Prepare a/c veri request
+
+    OpenConnect->>ReceivingBank: Account Verification request<br/>(accInfo)
+    ReceivingBank->>ReceivingBank: Validate account
+    ReceivingBank->>OpenConnect: Account Verification response<br/>(accInfo)
+
+    OpenConnect->>IPS: PaymentAuthorizationResponse<br/>(Pacs.002.ACSP)
+    IPS->>SenderBank: Debit sending<br/>participant
+    IPS->>ReceivingBank: Credit receiver<br/>participant
+
+    alt [: Debit Confirmation]
+        IPS->>SenderBank: PaymentConfirmation<br/>(Pacs.002.ACSP)
+        SenderBank->>SenderBank: Update response
+        SenderBank->>SenderBank: Debit customer
+        SenderBank->>Customer: Payment Result<br/>(txnId)
+        Customer->>Customer: Display shown to<br/>customer
+    end
+
+    alt [: Credit leg]
+        IPS->>OpenConnect: PaymentConfirmation<br/>(Pacs.002.ACSP)
+        OpenConnect->>OpenConnect: Validate request
+        OpenConnect->>OpenConnect: Prepare credit request
+        OpenConnect->>ReceivingBank: Credit Request<br/>(AccInfo, TxnInfo)
+        ReceivingBank->>ReceivingBank: Validate request
+        ReceivingBank->>ReceivingBank: Credit got failed
+        ReceivingBank->>OpenConnect: Credit Result
+        OpenConnect->>OpenConnect: Identified as "Failed" txn
+        OpenConnect->>OpenConnect: Prepare return payment<br/>(pacs.004)
+        OpenConnect->>IPS: ReturnPayment<br/>(Pacs.004)
+    end
+
+    alt [: Return Payment]
+        IPS->>IPS: Validate signature
+        IPS->>IPS: Validate request
+        IPS->>IPS: Reverse funds
+        IPS->>SenderBank: Return Payment<br/>(Pacs.004)
+        SenderBank->>SenderBank: Validate request
+        SenderBank->>SenderBank: Reverse amount
+        SenderBank->>Customer: Notify customer
+    end
+```
 
 
 
-![Scenario 4 – Credit request rejected by host; instant return initiated](./CreditFailedbyHost.png)
+<!--- ![Scenario 4 – Credit request rejected by host; instant return initiated](./CreditFailedbyHost.png) --->
 
 
 
@@ -720,7 +1383,76 @@ OpenConnect receives account identification request from IPS, parse the message 
 | **SAF Processor** | - Update response  <br> - Mark transaction as “Completed” |
 
 
-![Scenario 5 – Credit request got timeout and inquiry got timeout](./InwardTransferTimeout.png)
+```mermaid
+sequenceDiagram
+    title 13 - Open Connect: IPS: P2P Inward Transfer - S5 (Timeout)
+
+    participant Customer as Bank App
+    participant SenderBank as Sender Bank
+    participant IPS
+    participant OpenConnect
+    participant ReceivingBank as Receiving Bank
+    participant SAF as SAF Processor
+
+    Note right of Customer: Customer confirm details
+    Note right of Customer: Customer authorized transaction
+
+    Customer->>SenderBank: Payment Request (CustomerInfo, TxnInfo)
+    SenderBank->>SenderBank: Validate limit
+    SenderBank->>SenderBank: Hold funds from customer account
+    SenderBank->>SenderBank: Prepare pacs.008
+
+    SenderBank->>IPS: Pacs.008 (Payment Request)
+    IPS->>IPS: Validate signature
+    IPS->>IPS: Validate request
+    IPS->>IPS: Hold funds
+
+    IPS->>OpenConnect: PaymentAuthorizationResponse (Pacs.008)
+    OpenConnect->>OpenConnect: Validate Request
+    OpenConnect->>OpenConnect: Parse message
+    OpenConnect->>OpenConnect: Prepare a/c veri request
+
+    OpenConnect->>ReceivingBank: Account Verification request (accInfo)
+    ReceivingBank->>ReceivingBank: Validate account
+    ReceivingBank->>OpenConnect: Account Verification response (accInfo)
+
+    OpenConnect->>IPS: PaymentAuthorizationResponse (Pacs.002.ACSP)
+    IPS->>SenderBank: Debit sending participant
+    IPS->>ReceivingBank: Credit receiver participant
+
+    alt Debit Confirmation
+        IPS->>SenderBank: PaymentConfirmation (Pacs.002.ACSP)
+        SenderBank->>SenderBank: Update response
+        SenderBank->>SenderBank: Debit customer
+        SenderBank->>Customer: Payment Result (txnId)
+        Customer->>Customer: Display shown to customer
+    end
+
+    alt Credit leg
+        IPS->>OpenConnect: PaymentConfirmation (Pacs.002.ACSP)
+        OpenConnect->>OpenConnect: Validate request
+        OpenConnect->>OpenConnect: Prepare credit request
+        OpenConnect->>ReceivingBank: Credit Request (AccInfo, TxnInfo)
+        ReceivingBank->>ReceivingBank: Validate request
+        ReceivingBank->>ReceivingBank: Credit Customer
+        ReceivingBank->>ReceivingBank: Notify Customer
+
+        OpenConnect->>ReceivingBank: Credit Inquiry (TxnInfo)
+        ReceivingBank->>ReceivingBank: Inquire txn
+        OpenConnect->>OpenConnect: Mark txn as "TIP"
+        OpenConnect->>SAF: Store txn into SAF Queue
+
+        OpenConnect->>SAF: HTTP 200
+        loop x times
+            SAF->>ReceivingBank: Credit Request (accountInfo, TxnInfo)
+            ReceivingBank->>SAF: Credit Response ("success")
+
+Note over SAF,ReceivingBank: SAF Processor steps on success:<br/>1. Duplicate check<br/>2. Credit customer<br/>3. Post GL entries<br/>4. Update customer statement<br/>5. Update customer credit limit<br/>6. Send inApp notifications<br/>7. Send credit SMS
+        end
+    end
+```
+
+<!--- ![Scenario 5 – Credit request got timeout and inquiry got timeout](./InwardTransferTimeout.png) --->
 
 
 
